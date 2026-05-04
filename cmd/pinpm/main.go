@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nurazon59/go-template/cmd"
+	"github.com/nurazon59/pinpm/cmd"
 )
 
 func main() {

@@ -1,12 +1,12 @@
-# go-template
+# pinpm
 
-`go-template` is a small Go CLI template with a thin `kong`-based entrypoint, XDG-backed config loading, and release automation for GitHub Releases.
+`pinpm` is a small Go CLI template with a thin `kong`-based entrypoint, XDG-backed config loading, and release automation for GitHub Releases.
 
 ## Usage
 
 ```bash
-go run ./cmd/template/main.go --help
-go run ./cmd/template/main.go --version
+go run ./cmd/pinpm/main.go --help
+go run ./cmd/pinpm/main.go --version
 ```
 
 ### Config
@@ -14,8 +14,8 @@ go run ./cmd/template/main.go --version
 The CLI loads config from one of these locations:
 
 1. `--config /path/to/config.yaml`
-2. `GO_TEMPLATE_CONFIG=/path/to/config.yaml`
-3. `~/.config/go-template/config.yaml`
+2. `PINPM=/path/to/config.yaml`
+3. `~/.config/pinpm/config.yaml`
 
 Config format:
 

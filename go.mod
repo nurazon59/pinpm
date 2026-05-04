@@ -1,4 +1,4 @@
-module github.com/nurazon59/go-template
+module github.com/nurazon59/pinpm
 
 go 1.26.1
 

@@ -1,4 +1,4 @@
-package template
+package pinpm
 
 import (
 	"os"
