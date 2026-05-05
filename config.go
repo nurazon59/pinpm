@@ -15,7 +15,7 @@ type Config struct {
 }
 
 func LoadConfig(path string) (*Config, error) {
-	cfg := &Config{}
+	cfg := &Config{Version: 1}
 	if path == "" {
 		return cfg, nil
 	}
