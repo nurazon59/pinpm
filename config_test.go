@@ -34,7 +34,7 @@ func TestConfig(t *testing.T) {
 
 	for name, test := range loadTests {
 		t.Run(name, func(t *testing.T) {
-			cfg, err := Load(test.configFile)
+			cfg, err := LoadConfig(test.configFile)
 			if name == "invalid yaml" {
 				assert.Error(t, err)
 				assert.Nil(t, cfg)

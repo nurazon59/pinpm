@@ -1,6 +1,7 @@
 package pinpm
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -9,11 +10,12 @@ import (
 )
 
 type Config struct {
-	Version int `yaml:"version"`
+	Version int      `yaml:"version"`
+	Ignore  []string `yaml:"ignore,omitempty"`
 }
 
-func Load(path string) (*Config, error) {
-	cfg := Default()
+func LoadConfig(path string) (*Config, error) {
+	cfg := &Config{}
 	if path == "" {
 		return cfg, nil
 	}
@@ -33,8 +35,15 @@ func Load(path string) (*Config, error) {
 	return cfg, nil
 }
 
-func Default() *Config {
-	return &Config{
-		Version: 1,
+func SaveConfig(path string, cfg *Config) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
 	}
+
+	return os.WriteFile(path, data, 0o644)
+}
+
+func MarshalResultJSON(result *Result) ([]byte, error) {
+	return json.MarshalIndent(result, "", "  ")
 }
