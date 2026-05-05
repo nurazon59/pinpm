@@ -62,16 +62,16 @@ func TestResolveVersionUnit(t *testing.T) {
 		rangeSpec string
 		want      string
 	}{
-		"caret major":      {"^1.0.0", "1.2.0"},
-		"caret minor":      {"^1.1.0", "1.2.0"},
-		"tilde minor":      {"~1.1.0", "1.1.0"},
-		"tilde patch":      {"~1.2.0", "1.2.0"},
-		"gte":              {">=2.0.0", "3.0.0"},
-		"gt":               {">2.0.0", "3.0.0"},
-		"wildcard":         {"*", "3.0.0"},
-		"latest":           {"latest", "3.0.0"},
-		"major wildcard":   {"1.x", "1.2.0"},
-		"no match":         {">=4.0.0", "3.0.0"},
+		"caret major":    {"^1.0.0", "1.2.0"},
+		"caret minor":    {"^1.1.0", "1.2.0"},
+		"tilde minor":    {"~1.1.0", "1.1.0"},
+		"tilde patch":    {"~1.2.0", "1.2.0"},
+		"gte":            {">=2.0.0", "3.0.0"},
+		"gt":             {">2.0.0", "3.0.0"},
+		"wildcard":       {"*", "3.0.0"},
+		"latest":         {"latest", "3.0.0"},
+		"major wildcard": {"1.x", "1.2.0"},
+		"no match":       {">=4.0.0", "3.0.0"},
 	}
 
 	for name, tt := range tests {

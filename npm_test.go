@@ -60,11 +60,11 @@ func TestResolveVersion(t *testing.T) {
 		rangeSpec string
 		want      string
 	}{
-		"caret major":    {"^1.0.0", "1.2.0"},
-		"tilde minor":    {"~1.1.0", "1.1.0"},
-		"exact":          {"2.0.0", "2.0.0"},
-		"gte":            {">=2.0.0", "3.0.0"},
-		"wildcard":       {"*", "3.0.0"},
+		"caret major": {"^1.0.0", "1.2.0"},
+		"tilde minor": {"~1.1.0", "1.1.0"},
+		"exact":       {"2.0.0", "2.0.0"},
+		"gte":         {">=2.0.0", "3.0.0"},
+		"wildcard":    {"*", "3.0.0"},
 	}
 
 	for name, tt := range tests {
