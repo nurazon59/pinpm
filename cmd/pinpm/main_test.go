@@ -122,7 +122,7 @@ func TestCheckCommandE2E(t *testing.T) {
 
 	cmd := exec.Command(bin, "check", "-f", dst)
 	cmd.Env = append(os.Environ(), "npm_config_registry="+server.URL)
-	out, err := cmd.CombinedOutput()
+	out, _ := cmd.CombinedOutput()
 
 	require.Equal(t, 1, cmd.ProcessState.ExitCode())
 	require.Contains(t, string(out), "express (dependencies): ^4.0.0 -> 4.21.0")
