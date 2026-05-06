@@ -1,11 +1,10 @@
-package cmd
+package main
 
 import (
 	"fmt"
 	"os"
 
 	"github.com/alecthomas/kong"
-	pinpm "github.com/nurazon59/pinpm"
 )
 
 const appVersion = "v0.1.0"
@@ -15,7 +14,7 @@ var CLI struct {
 	Version kong.VersionFlag `help:"Print version information and quit."`
 	Init    InitCmd          `cmd:"" help:"Generate .pinpm.yaml config file."`
 	Pin     PinCmd           `cmd:"" help:"Pin dependencies in package.json."`
-	Check   CheckCmd         `cmd:"" help:"Check for unpinned dependencies."`
+	Check   CheckCmd         `cmd:"" check:"Check for unpinned dependencies."`
 }
 
 type InitCmd struct {
@@ -23,8 +22,8 @@ type InitCmd struct {
 }
 
 func (i *InitCmd) Run() error {
-	cfg, _ := pinpm.LoadConfig("")
-	return pinpm.SaveConfig(i.Output, cfg)
+	cfg, _ := LoadConfig("")
+	return SaveConfig(i.Output, cfg)
 }
 
 type PinCmd struct {
@@ -33,13 +32,13 @@ type PinCmd struct {
 }
 
 func (p *PinCmd) Run() error {
-	pkg, err := pinpm.LoadPackageJSON(p.File)
+	pkg, err := LoadPackageJSON(p.File)
 	if err != nil {
 		return err
 	}
 
-	client := pinpm.NewClient("")
-	checker := pinpm.NewChecker(client)
+	client := NewClient("")
+	checker := NewChecker(client)
 
 	result, err := checker.Check(pkg)
 	if err != nil {
@@ -72,13 +71,13 @@ type CheckCmd struct {
 }
 
 func (c *CheckCmd) Run() error {
-	pkg, err := pinpm.LoadPackageJSON(c.File)
+	pkg, err := LoadPackageJSON(c.File)
 	if err != nil {
 		return err
 	}
 
-	client := pinpm.NewClient("")
-	checker := pinpm.NewChecker(client)
+	client := NewClient("")
+	checker := NewChecker(client)
 
 	result, err := checker.Check(pkg)
 	if err != nil {
@@ -91,7 +90,7 @@ func (c *CheckCmd) Run() error {
 	}
 
 	if c.Format == "json" {
-		data, err := pinpm.MarshalResultJSON(result)
+		data, err := MarshalResultJSON(result)
 		if err != nil {
 			return err
 		}

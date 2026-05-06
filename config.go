@@ -1,4 +1,4 @@
-package pinpm
+package main
 
 import (
 	"encoding/json"
