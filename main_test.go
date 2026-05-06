@@ -89,7 +89,7 @@ func TestPinCommandE2E(t *testing.T) {
 	bin := buildBinary(t)
 	server := setupMockRegistry(t)
 
-	src := filepath.Join("..", "..", "testdata", "package.json")
+	src := filepath.Join("testdata", "package.json")
 	dst := filepath.Join(t.TempDir(), "package.json")
 
 	data, err := os.ReadFile(src)
@@ -113,7 +113,7 @@ func TestCheckCommandE2E(t *testing.T) {
 	bin := buildBinary(t)
 	server := setupMockRegistry(t)
 
-	src := filepath.Join("..", "..", "testdata", "package.json")
+	src := filepath.Join("testdata", "package.json")
 	dst := filepath.Join(t.TempDir(), "package.json")
 
 	data, err := os.ReadFile(src)
