@@ -107,3 +107,52 @@ func TestUpdateDependency(t *testing.T) {
 		t.Error("expected error for invalid section")
 	}
 }
+
+func TestUnknownFieldsPreserved(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "package.json")
+	original := `{
+		"name": "test-pkg",
+		"version": "1.0.0",
+		"scripts": {
+			"start": "node index.js",
+			"test": "jest"
+		},
+		"license": "MIT",
+		"description": "Test package",
+		"dependencies": {"express": "^4.0.0"}
+	}`
+
+	err := os.WriteFile(path, []byte(original), 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pkg, err := LoadPackageJSON(path)
+	if err != nil {
+		t.Fatalf("LoadPackageJSON error: %v", err)
+	}
+
+	if err := SavePackageJSON(path, pkg); err != nil {
+		t.Fatalf("SavePackageJSON error: %v", err)
+	}
+
+	loaded, err := LoadPackageJSON(path)
+	if err != nil {
+		t.Fatalf("second LoadPackageJSON error: %v", err)
+	}
+
+	if string(loaded.Extra["scripts"]) == "" {
+		t.Error("scripts field was lost after round-trip")
+	}
+	if string(loaded.Extra["license"]) == "" {
+		t.Error("license field was lost after round-trip")
+	}
+	if string(loaded.Extra["description"]) == "" {
+		t.Error("description field was lost after round-trip")
+	}
+
+	if loaded.Dependencies["express"] != "^4.0.0" {
+		t.Errorf("expected express '^4.0.0', got %q", loaded.Dependencies["express"])
+	}
+}

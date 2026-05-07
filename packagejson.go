@@ -13,6 +13,7 @@ type PackageJSON struct {
 	DevDependencies      map[string]string `json:"devDependencies,omitempty"`
 	PeerDependencies     map[string]string `json:"peerDependencies,omitempty"`
 	OptionalDependencies map[string]string `json:"optionalDependencies,omitempty"`
+	Extra                map[string]json.RawMessage
 }
 
 type Dependency struct {
@@ -66,6 +67,86 @@ func (p *PackageJSON) setDependency(section, name, version string) error {
 	return nil
 }
 
+func (p *PackageJSON) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	knownFields := []string{"name", "version", "dependencies", "devDependencies", "peerDependencies", "optionalDependencies"}
+	p.Extra = make(map[string]json.RawMessage)
+
+	for key, val := range raw {
+		isKnown := false
+		for _, k := range knownFields {
+			if key == k {
+				isKnown = true
+				break
+			}
+		}
+		if isKnown {
+			continue
+		}
+		p.Extra[key] = val
+	}
+
+	if v, ok := raw["name"]; ok {
+		json.Unmarshal(v, &p.Name)
+	}
+	if v, ok := raw["version"]; ok {
+		json.Unmarshal(v, &p.Version)
+	}
+	if v, ok := raw["dependencies"]; ok {
+		json.Unmarshal(v, &p.Dependencies)
+	}
+	if v, ok := raw["devDependencies"]; ok {
+		json.Unmarshal(v, &p.DevDependencies)
+	}
+	if v, ok := raw["peerDependencies"]; ok {
+		json.Unmarshal(v, &p.PeerDependencies)
+	}
+	if v, ok := raw["optionalDependencies"]; ok {
+		json.Unmarshal(v, &p.OptionalDependencies)
+	}
+
+	return nil
+}
+
+func (p PackageJSON) MarshalJSON() ([]byte, error) {
+	raw := make(map[string]json.RawMessage)
+
+	if p.Name != "" {
+		v, _ := json.Marshal(p.Name)
+		raw["name"] = v
+	}
+	if p.Version != "" {
+		v, _ := json.Marshal(p.Version)
+		raw["version"] = v
+	}
+	if p.Dependencies != nil {
+		v, _ := json.Marshal(p.Dependencies)
+		raw["dependencies"] = v
+	}
+	if p.DevDependencies != nil {
+		v, _ := json.Marshal(p.DevDependencies)
+		raw["devDependencies"] = v
+	}
+	if p.PeerDependencies != nil {
+		v, _ := json.Marshal(p.PeerDependencies)
+		raw["peerDependencies"] = v
+	}
+	if p.OptionalDependencies != nil {
+		v, _ := json.Marshal(p.OptionalDependencies)
+		raw["optionalDependencies"] = v
+	}
+
+	for key, val := range p.Extra {
+		raw[key] = val
+	}
+
+	return json.MarshalIndent(raw, "", "  ")
+}
+
 func LoadPackageJSON(path string) (*PackageJSON, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -73,7 +154,7 @@ func LoadPackageJSON(path string) (*PackageJSON, error) {
 	}
 
 	var pkg PackageJSON
-	if err := json.Unmarshal(data, &pkg); err != nil {
+	if err := pkg.UnmarshalJSON(data); err != nil {
 		return nil, fmt.Errorf("parse JSON: %w", err)
 	}
 
@@ -81,7 +162,7 @@ func LoadPackageJSON(path string) (*PackageJSON, error) {
 }
 
 func SavePackageJSON(path string, pkg *PackageJSON) error {
-	data, err := json.MarshalIndent(pkg, "", "  ")
+	data, err := pkg.MarshalJSON()
 	if err != nil {
 		return fmt.Errorf("marshal JSON: %w", err)
 	}
