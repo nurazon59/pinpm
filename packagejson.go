@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -145,18 +144,9 @@ func (p PackageJSON) MarshalJSON() ([]byte, error) {
 		raw[key] = val
 	}
 
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(raw); err != nil {
+	result, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
 		return nil, err
-	}
-
-	// Remove trailing newline added by Encode
-	result := buf.Bytes()
-	if len(result) > 0 && result[len(result)-1] == '\n' {
-		result = result[:len(result)-1]
 	}
 
 	return result, nil
