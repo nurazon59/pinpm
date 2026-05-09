@@ -1,9 +1,14 @@
 package main
 
 import (
+	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLoad(t *testing.T) {
@@ -15,24 +20,14 @@ func TestLoad(t *testing.T) {
 		"dependencies": {"express": "^4.0.0"},
 		"devDependencies": {"jest": "^29.0.0"}
 	}`), 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	pkg, err := LoadPackageJSON(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if pkg.Name != "test-pkg" {
-		t.Errorf("expected name 'test-pkg', got %q", pkg.Name)
-	}
-	if pkg.Dependencies["express"] != "^4.0.0" {
-		t.Errorf("expected express '^4.0.0', got %q", pkg.Dependencies["express"])
-	}
-	if pkg.DevDependencies["jest"] != "^29.0.0" {
-		t.Errorf("expected jest '^29.0.0', got %q", pkg.DevDependencies["jest"])
-	}
+	assert.Equal(t, "test-pkg", pkg.Name)
+	assert.Equal(t, "^4.0.0", pkg.Dependencies["express"])
+	assert.Equal(t, "^29.0.0", pkg.DevDependencies["jest"])
 }
 
 func TestSave(t *testing.T) {
@@ -47,21 +42,13 @@ func TestSave(t *testing.T) {
 		},
 	}
 
-	if err := SavePackageJSON(path, pkg); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, SavePackageJSON(path, pkg))
 
 	loaded, err := LoadPackageJSON(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if loaded.Name != "test-pkg" {
-		t.Errorf("expected name 'test-pkg', got %q", loaded.Name)
-	}
-	if loaded.Dependencies["express"] != "4.21.0" {
-		t.Errorf("expected express '4.21.0', got %q", loaded.Dependencies["express"])
-	}
+	assert.Equal(t, "test-pkg", loaded.Name)
+	assert.Equal(t, "4.21.0", loaded.Dependencies["express"])
 }
 
 func TestAllDependencies(t *testing.T) {
@@ -75,37 +62,24 @@ func TestAllDependencies(t *testing.T) {
 	}
 
 	deps := pkg.AllDependencies()
-	if len(deps) != 2 {
-		t.Fatalf("expected 2 deps, got %d", len(deps))
-	}
+	assert.Len(t, deps, 2)
 
 	depMap := make(map[string]Dependency)
 	for _, d := range deps {
 		depMap[d.Name] = d
 	}
 
-	if depMap["express"].Section != "dependencies" {
-		t.Errorf("expected express in 'dependencies', got %q", depMap["express"].Section)
-	}
-	if depMap["jest"].Section != "devDependencies" {
-		t.Errorf("expected jest in 'devDependencies', got %q", depMap["jest"].Section)
-	}
+	assert.Equal(t, "dependencies", depMap["express"].Section)
+	assert.Equal(t, "devDependencies", depMap["jest"].Section)
 }
 
 func TestUpdateDependency(t *testing.T) {
 	pkg := &PackageJSON{}
 
-	if err := pkg.setDependency("dependencies", "express", "4.21.0"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, pkg.setDependency("dependencies", "express", "4.21.0"))
+	assert.Equal(t, "4.21.0", pkg.Dependencies["express"])
 
-	if pkg.Dependencies["express"] != "4.21.0" {
-		t.Errorf("expected express '4.21.0', got %q", pkg.Dependencies["express"])
-	}
-
-	if err := pkg.setDependency("invalid", "pkg", "1.0.0"); err == nil {
-		t.Error("expected error for invalid section")
-	}
+	assert.Error(t, pkg.setDependency("invalid", "pkg", "1.0.0"))
 }
 
 func TestUnknownFieldsPreserved(t *testing.T) {
@@ -123,36 +97,48 @@ func TestUnknownFieldsPreserved(t *testing.T) {
 		"dependencies": {"express": "^4.0.0"}
 	}`
 
-	err := os.WriteFile(path, []byte(original), 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
 
 	pkg, err := LoadPackageJSON(path)
-	if err != nil {
-		t.Fatalf("LoadPackageJSON error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if err := SavePackageJSON(path, pkg); err != nil {
-		t.Fatalf("SavePackageJSON error: %v", err)
-	}
+	require.NoError(t, SavePackageJSON(path, pkg))
 
 	loaded, err := LoadPackageJSON(path)
-	if err != nil {
-		t.Fatalf("second LoadPackageJSON error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if string(loaded.Extra["scripts"]) == "" {
-		t.Error("scripts field was lost after round-trip")
-	}
-	if string(loaded.Extra["license"]) == "" {
-		t.Error("license field was lost after round-trip")
-	}
-	if string(loaded.Extra["description"]) == "" {
-		t.Error("description field was lost after round-trip")
-	}
+	assert.NotEmpty(t, string(loaded.Extra["scripts"]))
+	assert.NotEmpty(t, string(loaded.Extra["license"]))
+	assert.NotEmpty(t, string(loaded.Extra["description"]))
+	assert.Equal(t, "^4.0.0", loaded.Dependencies["express"])
+}
 
-	if loaded.Dependencies["express"] != "^4.0.0" {
-		t.Errorf("expected express '^4.0.0', got %q", loaded.Dependencies["express"])
-	}
+func TestScriptsAmpersandPreserved(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "package.json")
+	original := `{
+		"name": "test-pkg",
+		"version": "1.0.0",
+		"scripts": {
+			"build": "tsc && node dist/index.js",
+			"test": "echo 'hello && world'"
+		},
+		"dependencies": {"express": "^4.0.0"}
+	}`
+
+	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
+
+	pkg, err := LoadPackageJSON(path)
+	require.NoError(t, err)
+
+	require.NoError(t, SavePackageJSON(path, pkg))
+
+	loaded, err := LoadPackageJSON(path)
+	require.NoError(t, err)
+
+	var originalScripts, loadedScripts map[string]string
+	require.NoError(t, json.Unmarshal(pkg.Extra["scripts"], &originalScripts))
+	require.NoError(t, json.Unmarshal(loaded.Extra["scripts"], &loadedScripts))
+
+	assert.True(t, maps.Equal(originalScripts, loadedScripts))
 }
