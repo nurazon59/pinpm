@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.1.1](https://github.com/nurazon59/pinpm/compare/v0.1.0...v0.1.1) - 2026-05-09
+- fix(packagejson): prevent HTML escaping of &, <, > in JSON output by @nurazon59 in https://github.com/nurazon59/pinpm/pull/14
+
 ## [v0.1.0](https://github.com/nurazon59/pinpm/compare/v0.0.4...v0.1.0) - 2026-05-09
 - fix(packagejson): disable HTML escaping in JSON marshal by @nurazon59 in https://github.com/nurazon59/pinpm/pull/9
 - test: convert to table-driven tests with assert library by @nurazon59 in https://github.com/nurazon59/pinpm/pull/11
