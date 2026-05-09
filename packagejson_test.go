@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,8 +39,8 @@ func TestLoad(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.wantName, pkg.Name)
-			assert.Equal(t, tt.wantExpress, pkg.Dependencies["express"])
-			assert.Equal(t, tt.wantJest, pkg.DevDependencies["jest"])
+			assert.Equal(t, tt.wantExpress, pkg.Dependencies.Values["express"])
+			assert.Equal(t, tt.wantJest, pkg.DevDependencies.Values["jest"])
 		})
 	}
 }
@@ -51,12 +49,13 @@ func TestSave(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "package.json")
 
+	deps := NewOrderedMap()
+	deps.Set("express", "4.21.0")
+
 	pkg := &PackageJSON{
-		Name:    "test-pkg",
-		Version: "1.0.0",
-		Dependencies: map[string]string{
-			"express": "4.21.0",
-		},
+		Name:         "test-pkg",
+		Version:      "1.0.0",
+		Dependencies: deps,
 	}
 
 	require.NoError(t, SavePackageJSON(path, pkg))
@@ -65,24 +64,26 @@ func TestSave(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "test-pkg", loaded.Name)
-	assert.Equal(t, "4.21.0", loaded.Dependencies["express"])
+	assert.Equal(t, "4.21.0", loaded.Dependencies.Values["express"])
 }
 
 func TestAllDependencies(t *testing.T) {
+	deps := NewOrderedMap()
+	deps.Set("express", "^4.0.0")
+
+	devDeps := NewOrderedMap()
+	devDeps.Set("jest", "^29.0.0")
+
 	pkg := &PackageJSON{
-		Dependencies: map[string]string{
-			"express": "^4.0.0",
-		},
-		DevDependencies: map[string]string{
-			"jest": "^29.0.0",
-		},
+		Dependencies:    deps,
+		DevDependencies: devDeps,
 	}
 
-	deps := pkg.AllDependencies()
-	assert.Len(t, deps, 2)
+	depsList := pkg.AllDependencies()
+	assert.Len(t, depsList, 2)
 
 	depMap := make(map[string]Dependency)
-	for _, d := range deps {
+	for _, d := range depsList {
 		depMap[d.Name] = d
 	}
 
@@ -123,7 +124,7 @@ func TestUpdateDependency(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, pkg.Dependencies["express"])
+			assert.Equal(t, tt.want, pkg.Dependencies.Values["express"])
 		})
 	}
 }
@@ -156,20 +157,74 @@ func TestUnknownFieldsPreserved(t *testing.T) {
 	assert.NotEmpty(t, string(loaded.Extra["scripts"]))
 	assert.NotEmpty(t, string(loaded.Extra["license"]))
 	assert.NotEmpty(t, string(loaded.Extra["description"]))
-	assert.Equal(t, "^4.0.0", loaded.Dependencies["express"])
+	assert.Equal(t, "^4.0.0", loaded.Dependencies.Values["express"])
 }
 
 func TestScriptsAmpersandPreserved(t *testing.T) {
+	tests := map[string]struct {
+		scriptValue    string
+		wantNotEscaped string
+	}{
+		"ampersand": {
+			scriptValue:    "tsc && node dist/index.js",
+			wantNotEscaped: "&&",
+		},
+		"less_than": {
+			scriptValue:    "echo 'a < b'",
+			wantNotEscaped: "<",
+		},
+		"greater_than": {
+			scriptValue:    "echo 'a > b'",
+			wantNotEscaped: ">",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "package.json")
+			original := `{
+				"name": "test-pkg",
+				"version": "1.0.0",
+				"scripts": {
+					"build": "` + tt.scriptValue + `"
+				},
+				"dependencies": {"express": "^4.0.0"}
+			}`
+
+			require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
+
+			pkg, err := LoadPackageJSON(path)
+			require.NoError(t, err)
+
+			require.NoError(t, SavePackageJSON(path, pkg))
+
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+
+			content := string(data)
+			assert.Contains(t, content, tt.wantNotEscaped, tt.wantNotEscaped+" should not be escaped")
+			assert.NotContains(t, content, `\u0026`, "should not contain escaped unicode")
+		})
+	}
+}
+
+func TestKeysPreserveOrder(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "package.json")
+
 	original := `{
 		"name": "test-pkg",
 		"version": "1.0.0",
-		"scripts": {
-			"build": "tsc && node dist/index.js",
-			"test": "echo 'hello && world'"
+		"dependencies": {
+			"zebra": "^1.0.0",
+			"alpha": "^2.0.0",
+			"middle": "^3.0.0"
 		},
-		"dependencies": {"express": "^4.0.0"}
+		"devDependencies": {
+			"jest": "^29.0.0",
+			"eslint": "^8.0.0"
+		}
 	}`
 
 	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
@@ -179,33 +234,45 @@ func TestScriptsAmpersandPreserved(t *testing.T) {
 
 	require.NoError(t, SavePackageJSON(path, pkg))
 
-	loaded, err := LoadPackageJSON(path)
+	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 
-	var originalScripts, loadedScripts map[string]string
-	require.NoError(t, json.Unmarshal(pkg.Extra["scripts"], &originalScripts))
-	require.NoError(t, json.Unmarshal(loaded.Extra["scripts"], &loadedScripts))
+	content := string(data)
 
-	assert.True(t, maps.Equal(originalScripts, loadedScripts))
+	depContent := content[indexOf(content, "dependencies"):]
+	zebraIdx := indexOf(depContent, "zebra")
+	alphaIdx := indexOf(depContent, "alpha")
+	middleIdx := indexOf(depContent, "middle")
+
+	assert.Less(t, zebraIdx, alphaIdx, "zebra should come before alpha (original order)")
+	assert.Less(t, alphaIdx, middleIdx, "alpha should come before middle (original order)")
+
+	devContent := content[indexOf(content, "devDependencies"):]
+	jestIdx := indexOf(devContent, "jest")
+	eslintIdx := indexOf(devContent, "eslint")
+
+	assert.Less(t, jestIdx, eslintIdx, "jest should come before eslint (original order)")
 }
 
-func TestKeysAreSorted(t *testing.T) {
+func TestNewKeyAddedToEnd(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "package.json")
 
-	pkg := &PackageJSON{
-		Name:    "test-pkg",
-		Version: "1.0.0",
-		Dependencies: map[string]string{
-			"zebra":  "^1.0.0",
-			"alpha":  "^2.0.0",
-			"middle": "^3.0.0",
-		},
-		DevDependencies: map[string]string{
-			"jest":   "^29.0.0",
-			"eslint": "^8.0.0",
-		},
-	}
+	original := `{
+		"name": "test-pkg",
+		"version": "1.0.0",
+		"dependencies": {
+			"alpha": "^1.0.0",
+			"zebra": "^2.0.0"
+		}
+	}`
+
+	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
+
+	pkg, err := LoadPackageJSON(path)
+	require.NoError(t, err)
+
+	pkg.setDependency("dependencies", "middle", "^3.0.0")
 
 	require.NoError(t, SavePackageJSON(path, pkg))
 
@@ -214,21 +281,42 @@ func TestKeysAreSorted(t *testing.T) {
 
 	content := string(data)
 
-	depIdx := indexOf(content, "dependencies")
-	devIdx := indexOf(content, "devDependencies")
-	nameIdx := indexOf(content, "name")
-	versionIdx := indexOf(content, "version")
-
-	assert.Less(t, nameIdx, versionIdx, "name should come before version")
-	assert.Less(t, depIdx, devIdx, "dependencies should come before devDependencies")
-
-	depContent := content[depIdx:]
+	depContent := content[indexOf(content, "dependencies"):]
 	alphaIdx := indexOf(depContent, "alpha")
-	middleIdx := indexOf(depContent, "middle")
 	zebraIdx := indexOf(depContent, "zebra")
+	middleIdx := indexOf(depContent, "middle")
 
-	assert.Less(t, alphaIdx, middleIdx, "alpha should come before middle")
-	assert.Less(t, middleIdx, zebraIdx, "middle should come before zebra")
+	assert.Less(t, alphaIdx, zebraIdx, "alpha should come before zebra")
+	assert.Less(t, zebraIdx, middleIdx, "new key 'middle' should be added at the end")
+}
+
+func TestExistingKeyUpdatedInPlace(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "package.json")
+
+	original := `{
+		"name": "test-pkg",
+		"version": "1.0.0",
+		"dependencies": {
+			"alpha": "^1.0.0",
+			"zebra": "^2.0.0"
+		}
+	}`
+
+	require.NoError(t, os.WriteFile(path, []byte(original), 0o644))
+
+	pkg, err := LoadPackageJSON(path)
+	require.NoError(t, err)
+
+	pkg.setDependency("dependencies", "alpha", "^9.0.0")
+
+	require.NoError(t, SavePackageJSON(path, pkg))
+
+	loaded, err := LoadPackageJSON(path)
+	require.NoError(t, err)
+
+	assert.Equal(t, "^9.0.0", loaded.Dependencies.Values["alpha"])
+	assert.Equal(t, []string{"alpha", "zebra"}, loaded.Dependencies.Keys)
 }
 
 func indexOf(s, substr string) int {

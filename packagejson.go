@@ -1,18 +1,93 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 )
 
+type OrderedMap struct {
+	Keys   []string
+	Values map[string]string
+}
+
+func NewOrderedMap() *OrderedMap {
+	return &OrderedMap{
+		Keys:   []string{},
+		Values: make(map[string]string),
+	}
+}
+
+func (om *OrderedMap) UnmarshalJSON(data []byte) error {
+	var raw map[string]string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	om.Keys = make([]string, 0, len(raw))
+	om.Values = make(map[string]string)
+
+	dec := json.NewDecoder(bytes.NewReader(data))
+	t, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if _, ok := t.(json.Delim); !ok || t.(json.Delim) != '{' {
+		return fmt.Errorf("expected { got %v", t)
+	}
+
+	for dec.More() {
+		keyToken, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return fmt.Errorf("expected string key got %T", keyToken)
+		}
+		var val string
+		if err := dec.Decode(&val); err != nil {
+			return err
+		}
+		om.Keys = append(om.Keys, key)
+		om.Values[key] = val
+	}
+
+	return nil
+}
+
+func (om OrderedMap) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	for i, key := range om.Keys {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		k, _ := json.Marshal(key)
+		buf.Write(k)
+		buf.WriteByte(':')
+		v, _ := json.Marshal(om.Values[key])
+		buf.Write(v)
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
+}
+
+func (om *OrderedMap) Set(key, value string) {
+	if _, exists := om.Values[key]; !exists {
+		om.Keys = append(om.Keys, key)
+	}
+	om.Values[key] = value
+}
+
 type PackageJSON struct {
-	Name                 string            `json:"name,omitempty"`
-	Version              string            `json:"version,omitempty"`
-	Dependencies         map[string]string `json:"dependencies,omitempty"`
-	DevDependencies      map[string]string `json:"devDependencies,omitempty"`
-	PeerDependencies     map[string]string `json:"peerDependencies,omitempty"`
-	OptionalDependencies map[string]string `json:"optionalDependencies,omitempty"`
+	Name                 string      `json:"name,omitempty"`
+	Version              string      `json:"version,omitempty"`
+	Dependencies         *OrderedMap `json:"dependencies,omitempty"`
+	DevDependencies      *OrderedMap `json:"devDependencies,omitempty"`
+	PeerDependencies     *OrderedMap `json:"peerDependencies,omitempty"`
+	OptionalDependencies *OrderedMap `json:"optionalDependencies,omitempty"`
 	Extra                map[string]json.RawMessage
 }
 
@@ -25,19 +100,19 @@ type Dependency struct {
 func (p *PackageJSON) AllDependencies() []Dependency {
 	var deps []Dependency
 
-	for section, m := range map[string]map[string]string{
+	for section, om := range map[string]*OrderedMap{
 		"dependencies":         p.Dependencies,
 		"devDependencies":      p.DevDependencies,
 		"peerDependencies":     p.PeerDependencies,
 		"optionalDependencies": p.OptionalDependencies,
 	} {
-		if m == nil {
+		if om == nil {
 			continue
 		}
-		for name, ver := range m {
+		for _, name := range om.Keys {
 			deps = append(deps, Dependency{
 				Name:    name,
-				Version: ver,
+				Version: om.Values[name],
 				Section: section,
 			})
 		}
@@ -47,7 +122,7 @@ func (p *PackageJSON) AllDependencies() []Dependency {
 }
 
 func (p *PackageJSON) setDependency(section, name, version string) error {
-	var target *map[string]string
+	var target **OrderedMap
 	switch section {
 	case "dependencies":
 		target = &p.Dependencies
@@ -61,9 +136,9 @@ func (p *PackageJSON) setDependency(section, name, version string) error {
 		return fmt.Errorf("unknown dependency section: %s", section)
 	}
 	if *target == nil {
-		*target = make(map[string]string)
+		*target = NewOrderedMap()
 	}
-	(*target)[name] = version
+	(*target).Set(name, version)
 	return nil
 }
 
@@ -124,19 +199,19 @@ func (p PackageJSON) MarshalJSON() ([]byte, error) {
 		raw["version"] = v
 	}
 	if p.Dependencies != nil {
-		v, _ := json.Marshal(p.Dependencies)
+		v, _ := p.Dependencies.MarshalJSON()
 		raw["dependencies"] = v
 	}
 	if p.DevDependencies != nil {
-		v, _ := json.Marshal(p.DevDependencies)
+		v, _ := p.DevDependencies.MarshalJSON()
 		raw["devDependencies"] = v
 	}
 	if p.PeerDependencies != nil {
-		v, _ := json.Marshal(p.PeerDependencies)
+		v, _ := p.PeerDependencies.MarshalJSON()
 		raw["peerDependencies"] = v
 	}
 	if p.OptionalDependencies != nil {
-		v, _ := json.Marshal(p.OptionalDependencies)
+		v, _ := p.OptionalDependencies.MarshalJSON()
 		raw["optionalDependencies"] = v
 	}
 
@@ -148,6 +223,11 @@ func (p PackageJSON) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// json.MarshalIndentは & < > をエスケープするため、元に戻す
+	result = bytes.ReplaceAll(result, []byte(`\u0026`), []byte(`&`))
+	result = bytes.ReplaceAll(result, []byte(`\u003c`), []byte(`<`))
+	result = bytes.ReplaceAll(result, []byte(`\u003e`), []byte(`>`))
 
 	return result, nil
 }
