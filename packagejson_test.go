@@ -188,3 +188,54 @@ func TestScriptsAmpersandPreserved(t *testing.T) {
 
 	assert.True(t, maps.Equal(originalScripts, loadedScripts))
 }
+
+func TestKeysAreSorted(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "package.json")
+
+	pkg := &PackageJSON{
+		Name:    "test-pkg",
+		Version: "1.0.0",
+		Dependencies: map[string]string{
+			"zebra":  "^1.0.0",
+			"alpha":  "^2.0.0",
+			"middle": "^3.0.0",
+		},
+		DevDependencies: map[string]string{
+			"jest":   "^29.0.0",
+			"eslint": "^8.0.0",
+		},
+	}
+
+	require.NoError(t, SavePackageJSON(path, pkg))
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	content := string(data)
+
+	depIdx := indexOf(content, "dependencies")
+	devIdx := indexOf(content, "devDependencies")
+	nameIdx := indexOf(content, "name")
+	versionIdx := indexOf(content, "version")
+
+	assert.Less(t, nameIdx, versionIdx, "name should come before version")
+	assert.Less(t, depIdx, devIdx, "dependencies should come before devDependencies")
+
+	depContent := content[depIdx:]
+	alphaIdx := indexOf(depContent, "alpha")
+	middleIdx := indexOf(depContent, "middle")
+	zebraIdx := indexOf(depContent, "zebra")
+
+	assert.Less(t, alphaIdx, middleIdx, "alpha should come before middle")
+	assert.Less(t, middleIdx, zebraIdx, "middle should come before zebra")
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
