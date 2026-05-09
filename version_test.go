@@ -2,6 +2,9 @@ package main
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsPinned(t *testing.T) {
@@ -23,9 +26,8 @@ func TestIsPinned(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := IsPinned(tt.input); got != tt.want {
-				t.Errorf("IsPinned(%q) = %v, want %v", tt.input, got, tt.want)
-			}
+			got := IsPinned(tt.input)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -48,9 +50,8 @@ func TestShouldSkip(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := ShouldSkip(tt.input); got != tt.want {
-				t.Errorf("ShouldSkip(%q) = %v, want %v", tt.input, got, tt.want)
-			}
+			got := ShouldSkip(tt.input)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -77,12 +78,8 @@ func TestResolveVersionUnit(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			got, err := ResolveVersion(tt.rangeSpec, versions)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.want {
-				t.Errorf("ResolveVersion(%q) = %q, want %q", tt.rangeSpec, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

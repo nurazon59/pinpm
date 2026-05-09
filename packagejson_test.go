@@ -12,22 +12,39 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "package.json")
-	err := os.WriteFile(path, []byte(`{
-		"name": "test-pkg",
-		"version": "1.0.0",
-		"dependencies": {"express": "^4.0.0"},
-		"devDependencies": {"jest": "^29.0.0"}
-	}`), 0o644)
-	require.NoError(t, err)
+	tests := map[string]struct {
+		content     string
+		wantName    string
+		wantExpress string
+		wantJest    string
+	}{
+		"basic": {
+			content: `{
+				"name": "test-pkg",
+				"version": "1.0.0",
+				"dependencies": {"express": "^4.0.0"},
+				"devDependencies": {"jest": "^29.0.0"}
+			}`,
+			wantName:    "test-pkg",
+			wantExpress: "^4.0.0",
+			wantJest:    "^29.0.0",
+		},
+	}
 
-	pkg, err := LoadPackageJSON(path)
-	require.NoError(t, err)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "package.json")
+			require.NoError(t, os.WriteFile(path, []byte(tt.content), 0o644))
 
-	assert.Equal(t, "test-pkg", pkg.Name)
-	assert.Equal(t, "^4.0.0", pkg.Dependencies["express"])
-	assert.Equal(t, "^29.0.0", pkg.DevDependencies["jest"])
+			pkg, err := LoadPackageJSON(path)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.wantName, pkg.Name)
+			assert.Equal(t, tt.wantExpress, pkg.Dependencies["express"])
+			assert.Equal(t, tt.wantJest, pkg.DevDependencies["jest"])
+		})
+	}
 }
 
 func TestSave(t *testing.T) {
@@ -74,12 +91,41 @@ func TestAllDependencies(t *testing.T) {
 }
 
 func TestUpdateDependency(t *testing.T) {
-	pkg := &PackageJSON{}
+	tests := map[string]struct {
+		section string
+		name    string
+		version string
+		wantErr bool
+		want    string
+	}{
+		"dependencies": {
+			section: "dependencies",
+			name:    "express",
+			version: "4.21.0",
+			want:    "4.21.0",
+		},
+		"invalid section": {
+			section: "invalid",
+			name:    "pkg",
+			version: "1.0.0",
+			wantErr: true,
+		},
+	}
 
-	require.NoError(t, pkg.setDependency("dependencies", "express", "4.21.0"))
-	assert.Equal(t, "4.21.0", pkg.Dependencies["express"])
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			pkg := &PackageJSON{}
+			err := pkg.setDependency(tt.section, tt.name, tt.version)
 
-	assert.Error(t, pkg.setDependency("invalid", "pkg", "1.0.0"))
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, pkg.Dependencies["express"])
+		})
+	}
 }
 
 func TestUnknownFieldsPreserved(t *testing.T) {
