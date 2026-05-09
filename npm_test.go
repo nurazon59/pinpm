@@ -4,35 +4,69 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetPackage(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/express" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{
-			"name": "express",
-			"dist-tags": {"latest": "4.21.0"},
-			"versions": {"4.21.0": {"version": "4.21.0"}}
-		}`))
-	}))
-	defer server.Close()
-
-	client := NewClient(server.URL)
-
-	pkg, err := client.GetPackage("express")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	tests := map[string]struct {
+		path         string
+		responseBody string
+		responseCode int
+		packageName  string
+		wantName     string
+		wantLatest   string
+		wantErr      bool
+	}{
+		"found": {
+			path:         "/express",
+			responseCode: http.StatusOK,
+			responseBody: `{
+				"name": "express",
+				"dist-tags": {"latest": "4.21.0"},
+				"versions": {"4.21.0": {"version": "4.21.0"}}
+			}`,
+			packageName: "express",
+			wantName:    "express",
+			wantLatest:  "4.21.0",
+		},
+		"not found": {
+			path:         "/nonexistent",
+			responseCode: http.StatusNotFound,
+			responseBody: "",
+			packageName:  "nonexistent",
+			wantErr:      true,
+		},
 	}
 
-	if pkg.Name != "express" {
-		t.Errorf("expected name 'express', got %q", pkg.Name)
-	}
-	if pkg.DistTags["latest"] != "4.21.0" {
-		t.Errorf("expected latest '4.21.0', got %q", pkg.DistTags["latest"])
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tt.path {
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.responseCode)
+				if tt.responseBody != "" {
+					w.Write([]byte(tt.responseBody))
+				}
+			}))
+			defer server.Close()
+
+			client := NewClient(server.URL)
+			pkg, err := client.GetPackage(tt.packageName)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantName, pkg.Name)
+			assert.Equal(t, tt.wantLatest, pkg.DistTags["latest"])
+		})
 	}
 }
 
@@ -70,12 +104,8 @@ func TestResolveVersion(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			got, err := client.ResolveVersion("test-pkg", tt.rangeSpec)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.want {
-				t.Errorf("ResolveVersion(%q) = %q, want %q", tt.rangeSpec, got, tt.want)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -89,7 +119,5 @@ func TestGetPackageNotFound(t *testing.T) {
 	client := NewClient(server.URL)
 
 	_, err := client.GetPackage("nonexistent")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
+	assert.Error(t, err)
 }
